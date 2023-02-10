@@ -1,7 +1,8 @@
 name: Stale
 
 on:
-  # No schedule
+  schedule:
+    - cron: '* * * * *'
 
 jobs:
   stale:
