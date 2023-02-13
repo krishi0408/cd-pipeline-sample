@@ -12,43 +12,47 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Get list of open PRs
-        id: prs
-        run: |
-          # Get the list of open pull requests in the repository
-          prs_json=$(curl -s "https://api.github.com/repos/${krishi0408/cd-pipeline-sample}/pulls?state=open)"
-          prs=$(echo "$prs_json" | jq -r ".number")
+      - name: Set up Python environment
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.x
 
-          # Store the list of pull requests as a GitHub Actions output
-          echo "::set-output name=prs::$prs"
+      - name: Install dependencies
+        run: |
+          pip install requests
+          pip install python-dateutil
 
       - name: Close stale PRs
-        uses: actions/github-script@0.8.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          script: |
-            # Get the list of open pull requests
-            prs="${{ steps.prs.outputs.prs }}"
+        run: |
+          import requests
+          import datetime
+          from dateutil import parser
 
-            # Split the list of pull requests into an array
-            IFS=',' read -r -a pr_numbers <<< "$prs"
+          def close_stale_pull_requests(auth_token,${{github.repository}}, days_threshold):
+              headers = {"Authorization": f"Token {auth_token}"}
+              pull_requests_url = f"https://api.github.com/repos/krishi0408/cd-pipeline-samples/pulls"
+              pull_requests = requests.get(pull_requests_url, headers=headers).json()
 
-            # Loop through each pull request
-            for pr_number in "${pr_numbers[@]}"; do
-              echo "Checking pull request #$pr_number"
+              now = datetime.datetime.now(datetime.timezone.utc)
 
-              # Get the creation time of the pull request
-              created_at=$(curl -s https://api.github.com/repos/$krishi0408/cd-pipeline-sample/pulls/$pr_number | jq '.created_at')
+              for pull_request in pull_requests:
+                  created_at = pull_request["created_at"]
+                  created_at = parser.parse(created_at)
+                  days_since_created = (now - created_at).days
 
-              # Calculate the difference between the current time and the creation time of the pull request
-              days_since_created=$(( ($(date +%s) - $(date -d "$created_at" +%s)) / 86400 ))
+                  if days_since_created > days_threshold:
+                      pull_request_id = pull_request["number"]
+                      update_pull_request_url = f"https://api.github.com/repos/krishi0408/cd-pipeline-samples/pulls/{pull_request_id}"
+                      data = {"state": "closed"}
+                      response = requests.patch(update_pull_request_url, headers=headers, json=data)
 
-              # If the pull request has been open for more than 14 days, close it
-              if [ "$days_since_created" -gt 14 ]; then
-                echo "Closing pull request #$pr_number"
-                curl -s -X PATCH -H "Authorization: token ${{ env.GITHUB_TOKEN }}" -H "Accept: application/vnd.github+json" https://api.github.com/repos/${{github.repository}}/pulls/$pr_number -d '{"state":"closed"}'
-              else
-                echo "Pull request #$pr_number is still fresh, no need to close it"
-              fi
-            done
+                      if response.status_code == 200:
+                          print(f"Closed pull request #{pull_request_id}")
+                      else:
+                          print(f"Failed to close pull request #{pull_request_id}: {response.json()}")
+
+
+          close_stale_pull_requests(os.environ["secrets.GITHUB_TOKEN"], "${{github.repository}}", 30)
+
