@@ -17,7 +17,7 @@ jobs:
         run: |
           # Get the list of open pull requests in the repository
           prs_json=$(curl -s https://api.github.com/repos/${krishi0408/cd-pipeline-sample}/pulls?state=open)
-          prs=$(echo "$prs_json" | jq '.[].number')
+          prs=$(echo "$prs_json" | jq -r ".number")
 
           # Store the list of pull requests as a GitHub Actions output
           echo "::set-output name=prs::$prs"
