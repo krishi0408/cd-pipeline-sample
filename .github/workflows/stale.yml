@@ -1,58 +1,31 @@
-name: Autoclose Stale PRs
+name: Close stale PRs
 
 on:
   schedule:
-    - cron: "* * * * *"
+    # Schedule the workflow to run every day at 00:00 UTC
+    - cron: '* * * * *'
 
 jobs:
-  autoclose:
+  close-stale-prs:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
-      - name: Set up Python environment
+      # Checkout the code repository
+      - uses: actions/checkout@v2
+      
+      # Install Python
+      - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: 3.7
-
+          python-version: 3.8
+      
+      # Install dependencies
       - name: Install dependencies
         run: |
-          pip install requests
-          pip install python-dateutil
-
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      # Run the Python script to close stale PRs
       - name: Close stale PRs
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          import requests
-          import datetime
-          from dateutil import parser
-
-          def close_stale_pull_requests(auth_token,${{github.repository}}, days_threshold):
-              headers = {"Authorization": f"Token {auth_token}"}
-              pull_requests_url = f"https://api.github.com/repos/krishi0408/cd-pipeline-samples/pulls"
-              pull_requests = requests.get(pull_requests_url, headers=headers).json()
-
-              now = datetime.datetime.now(datetime.timezone.utc)
-
-              for pull_request in pull_requests:
-                  created_at = pull_request["created_at"]
-                  created_at = parser.parse(created_at)
-                  days_since_created = (now - created_at).days
-
-                  if days_since_created > days_threshold:
-                      pull_request_id = pull_request["number"]
-                      update_pull_request_url = f"https://api.github.com/repos/krishi0408/cd-pipeline-samples/pulls/{pull_request_id}"
-                      data = {"state": "closed"}
-                      response = requests.patch(update_pull_request_url, headers=headers, json=data)
-
-                      if response.status_code == 200:
-                          print(f"Closed pull request #{pull_request_id}")
-                      else:
-                          print(f"Failed to close pull request #{pull_request_id}: {response.json()}")
-
-
-          close_stale_pull_requests(os.environ["secrets.GITHUB_TOKEN"], "${{github.repository}}", 30)
-
+        run: python stale.py
